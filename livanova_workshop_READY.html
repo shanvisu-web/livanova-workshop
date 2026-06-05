@@ -1,0 +1,604 @@
+<!doctype html>
+<!-- LivaNova × LTTS AI Workshop — ONLINE live-poll (Supabase realtime) -->
+<!-- ONE FILE. Presenter screen: open ?mode=present  ·  Phones: open ?mode=vote -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>LivaNova × LTTS — Live Workshop Poll</title>
+
+<!-- Supabase JS v2 + QR code lib -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+<style>
+  /* ============================================================
+     >>> STEP 3: PASTE YOUR TWO SUPABASE VALUES BELOW (in the JS) <<<
+     Nothing to change in the CSS.
+     ============================================================ */
+  :root{
+    --blue:#064CC8; --blue-d:#112868; --light:#B4ECF9;
+    --ink:#0c1430; --muted:#5b6b86; --line:#dfe6f2; --bg:#f4f7fc; --card:#fff;
+    --green:#2e8540; --green-bg:#e3efe1; --blue-bg:#e8eefb; --amber:#c0631c; --amber-bg:#fbe6d6; --softblue-bg:#dde7f6;
+    --shadow:0 1px 2px rgba(17,40,104,.06),0 10px 30px rgba(17,40,104,.08);
+    --font:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --serif:"Newsreader",Georgia,serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800;900&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+
+  /* connection banner */
+  #banner{position:fixed;top:0;left:0;right:0;z-index:200;padding:8px 16px;font-size:13px;font-weight:600;text-align:center;display:none}
+  #banner.err{display:block;background:#fff0f0;color:#b3261e;border-bottom:1px solid #f3c2c2}
+  #banner.ok{display:block;background:#eafaf0;color:#1c7a3e;border-bottom:1px solid #b9e6c8;animation:fade 2.5s forwards}
+  @keyframes fade{0%,70%{opacity:1}100%{opacity:0;display:none}}
+
+  /* ============ PRESENTER ============ */
+  .app{height:100vh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--card);border-bottom:1px solid var(--line);z-index:30}
+  .brand{font-weight:900;color:var(--blue-d);font-size:15px}.brand b{color:var(--blue)}
+  .pill{font-size:11px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:4px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.6px}
+  .spacer{flex:1}
+  .joincode{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-weight:700}
+  .joincode b{font-size:18px;color:var(--blue-d);letter-spacing:2px}
+  .qcount{font-size:12px;color:var(--muted);font-weight:600}
+  .rail{display:flex;gap:4px;padding:8px 22px;background:var(--card);border-bottom:1px solid var(--line)}
+  .rail .seg{flex:1;height:5px;border-radius:99px;background:var(--line);cursor:pointer;transition:.2s}
+  .rail .seg.done{background:var(--light)}.rail .seg.active{background:var(--blue)}
+  .stage{flex:1;position:relative;overflow:hidden}
+  .slide{position:absolute;inset:0;padding:26px 4vw 18px;display:none;flex-direction:column;overflow:auto}
+  .slide.show{display:flex;animation:in .35s ease}
+  @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .kicker{font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--blue)}
+  .qtitle{font-family:var(--serif);font-size:clamp(24px,3.2vw,44px);line-height:1.08;font-weight:600;color:var(--blue-d);margin:6px 0 4px;max-width:22ch}
+  .qhint{font-size:14px;color:var(--muted);margin-bottom:14px}
+  .live-tip{font-size:12.5px;color:var(--amber);background:var(--amber-bg);border-radius:8px;padding:8px 12px;margin-top:auto;align-self:flex-start;max-width:64ch;line-height:1.4}
+  .live-tip b{color:var(--amber)}
+  .viz{flex:1;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);position:relative;overflow:hidden;min-height:320px}
+  .viz-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .viz-head .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .resp{font-size:12px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:3px 9px;border-radius:99px}
+  .viz-body{position:absolute;inset:46px 0 0 0;overflow:auto;padding:16px}
+
+  /* animated word cloud (Mentimeter-style) */
+  .cloudwrap{position:absolute;inset:0}
+  .cw{position:absolute;font-weight:800;line-height:1;white-space:nowrap;transform:translate(-50%,-50%) scale(0);transition:transform .55s cubic-bezier(.2,1.4,.4,1),left .5s ease,top .5s ease,font-size .4s ease;will-change:transform}
+  .cw.in{transform:translate(-50%,-50%) scale(1)}
+
+  /* bars */
+  .bars{display:flex;flex-direction:column;gap:14px;justify-content:center;height:100%}
+  .bar-row .bl{display:flex;justify-content:space-between;font-size:15px;font-weight:600;margin-bottom:5px}
+  .bar-row .bl .pct{color:var(--blue)}
+  .track{height:32px;background:var(--bg);border-radius:8px;overflow:hidden}
+  .fill{height:100%;border-radius:8px;width:0;transition:width .6s cubic-bezier(.3,1,.4,1)}
+  .fill.A{background:linear-gradient(90deg,#2e8540,#5cae6c)}.fill.B{background:linear-gradient(90deg,#064CC8,#3f78e0)}
+  .fill.C{background:linear-gradient(90deg,#c0631c,#e0944f)}.fill.D{background:linear-gradient(90deg,#7a4fd0,#a07fe0)}
+
+  /* scales */
+  .scale-block{margin-bottom:18px}
+  .scale-block .st{font-size:15px;font-weight:700;color:var(--blue-d)}
+  .scale-block .sd{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+  .dotline{position:relative;height:46px;background:linear-gradient(90deg,#fbe6d6,#fff6e0,#e3efe1);border-radius:8px;border:1px solid var(--line)}
+  .dotline .tick{position:absolute;top:100%;font-size:10px;color:var(--muted);transform:translateX(-50%);margin-top:2px}
+  .dot{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:var(--blue);border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .4s ease}
+  .meanline{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--blue-d);border-radius:2px;transition:left .4s ease}
+  .meanline::after{content:attr(data-m);position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:800;color:var(--blue-d);white-space:nowrap}
+
+  /* ranking (presenter shows aggregate) */
+  .rank-list{display:flex;flex-direction:column;gap:10px;max-width:640px;margin:0 auto}
+  .rank-item{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-weight:600;transition:.4s}
+  .rank-item .num{width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
+  .rank-item .score{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700}
+
+  /* heat map */
+  .quad-wrap{height:100%;display:flex;flex-direction:column;position:relative}
+  .quad-title{font-size:13px;font-weight:700;color:var(--blue-d);margin-bottom:8px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .quad-title .leg{font-size:11px;font-weight:600;color:var(--muted)}
+  .quad{position:relative;flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:280px}
+  .q-tl{background:var(--blue-bg)}.q-tr{background:var(--green-bg)}.q-bl{background:var(--amber-bg)}.q-br{background:var(--softblue-bg)}
+  .q-lab{position:absolute;font-size:12px;font-weight:800}
+  .q-lab.tl{top:10px;left:14px;color:var(--blue)}.q-lab.tr{top:10px;right:14px;color:var(--green)}
+  .q-lab.bl{bottom:10px;left:14px;color:var(--amber)}.q-lab.br{bottom:10px;right:14px;color:var(--blue)}
+  .axis-x{text-align:center;font-size:11px;font-weight:800;color:var(--blue-d);text-transform:uppercase;letter-spacing:.5px;margin-top:6px}
+  .axis-y{position:absolute;left:-4px;top:50%;transform:rotate(-90deg) translateX(50%);transform-origin:left;font-size:11px;font-weight:800;color:var(--blue-d);text-transform:uppercase;letter-spacing:.5px}
+  .pin{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--blue);border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .4s cubic-bezier(.2,1.4,.4,1);animation:pop .4s ease}
+  @keyframes pop{from{transform:translate(-50%,-50%) scale(0)}to{transform:translate(-50%,-50%) scale(1)}}
+  .pin.pre{background:none;border:2px dashed var(--blue-d);width:30px;height:30px;animation:none}
+  .pin-name{position:absolute;font-size:11px;font-weight:700;color:var(--blue-d);transform:translate(8px,-50%);white-space:nowrap}
+
+  /* open text cards */
+  .txtcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:9px;font-size:15px;line-height:1.4;animation:in .3s ease}
+
+  .navbar{display:flex;align-items:center;gap:12px;padding:12px 22px;background:var(--card);border-top:1px solid var(--line)}
+  .navbar .meta{font-size:12px;color:var(--muted);font-weight:600}
+  .nav-btns{margin-left:auto;display:flex;gap:8px}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--font);font-weight:700;font-size:14px;border:none;border-radius:10px;padding:11px 18px;cursor:pointer;transition:.15s}
+  .btn.primary{background:var(--blue);color:#fff}.btn.primary:hover{background:#0540a8}
+  .btn.ghost{background:var(--card);border:1.5px solid var(--line);color:var(--blue-d)}.btn.ghost:hover{border-color:var(--blue)}
+  .reset-mini{font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline}
+  .empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:14px;font-style:italic;text-align:center;padding:20px}
+
+  /* QR join slide */
+  .joinslide{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;height:100%;text-align:center}
+  .joinslide h2{font-family:var(--serif);font-size:clamp(28px,4vw,52px);color:var(--blue-d)}
+  #qrbox{background:#fff;padding:18px;border-radius:16px;box-shadow:var(--shadow)}
+  .joinurl{font-size:14px;color:var(--muted);word-break:break-all;max-width:80vw}
+
+  /* ============ VOTER (phone) ============ */
+  .voter{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding:18px}
+  .vhead{padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .vbrand{font-weight:900;color:var(--blue-d);font-size:14px}.vbrand b{color:var(--blue)}
+  .vstatus{font-size:12px;color:var(--muted);margin-top:3px}
+  .vcard{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .vkicker{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:6px}
+  .vq{font-family:var(--serif);font-size:26px;line-height:1.15;color:var(--blue-d);margin-bottom:6px}
+  .vhint{font-size:13px;color:var(--muted);margin-bottom:20px}
+  .voter input[type=text],.voter textarea{width:100%;font-family:var(--font);font-size:17px;border:1.5px solid var(--line);border-radius:12px;padding:14px;outline:none}
+  .voter input:focus,.voter textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-bg)}
+  .voter textarea{min-height:90px;resize:vertical}
+  .vbtn{width:100%;margin-top:14px;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer}
+  .vbtn:disabled{opacity:.5}
+  .vopt{width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer;font-size:16px;font-weight:600;color:var(--blue-d)}
+  .vopt:active,.vopt.sel{border-color:var(--blue);background:var(--blue-bg)}
+  .vopt .vsub{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-top:3px}
+  .vscale{display:flex;gap:8px;margin:8px 0 18px}
+  .vscale button{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:16px 0;font-size:19px;font-weight:800;color:var(--blue-d);cursor:pointer}
+  .vscale button.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .vscale-lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:18px}
+  .vstmt{font-size:15px;font-weight:700;color:var(--blue-d);margin-bottom:4px}
+  .vthanks{text-align:center;padding:40px 0}
+  .vthanks .big{font-size:46px;margin-bottom:10px}
+  .vwait{text-align:center;color:var(--muted);padding:50px 20px}
+  .vquad{position:relative;width:100%;aspect-ratio:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:8px 0;touch-action:none}
+  .vquad .qq{position:relative}.vquad .q-lab{font-size:10px;line-height:1.1;padding:6px}
+  .vpin{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--blue);border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .vranklist{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .vrank-item{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:14px;font-weight:600;touch-action:none}
+  .vrank-item .num{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+  .vrank-item .grip{margin-left:auto;color:var(--muted);font-size:20px}
+
+  /* gate (missing config) */
+  .gate{max-width:680px;margin:60px auto;padding:30px;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+  .gate h1{font-family:var(--serif);color:var(--blue-d);margin-bottom:12px}
+  .gate code{background:var(--bg);padding:2px 6px;border-radius:5px;font-size:13px}
+  .gate ol{margin:14px 0 14px 20px;line-height:1.7}
+  .gate pre{background:#0c1430;color:#cfe0ff;padding:14px;border-radius:10px;overflow:auto;font-size:12px;margin:10px 0}
+</style>
+</head>
+<body>
+<div id="banner"></div>
+<div id="root"></div>
+
+<script>
+/* ============================================================
+   STEP 3 — PASTE YOUR TWO VALUES HERE
+   Get both from Supabase: Project → Connect (or Settings → API).
+   - SUPABASE_URL    looks like  https://abcdefgh.supabase.co
+   - SUPABASE_KEY    is the "anon" / "publishable" key (sb_publishable_... or eyJ...)
+   Leave the quotes. Do NOT paste the secret/service_role key.
+   ============================================================ */
+const SUPABASE_URL = "https://napizlfntbxnctwmmmdg.supabase.co";
+const SUPABASE_KEY = "sb_publishable_b-i4jOVOQ3EhRmcRJ5p08Q_VUFyLaXt";
+
+/* one shared session id — change to run a fresh, empty session */
+const SESSION = "livanova-2026";
+
+/* ---------------- slide model (same 15 as the Build Pack) ---------------- */
+const PALETTE=['#064CC8','#112868','#2e8540','#c0631c','#7a4fd0','#0a8aa0','#b03060','#1f7a8c'];
+const SLIDES=[
+ {id:'M1',block:'Block 1 · Vision',kicker:'M1 · Word Cloud',type:'cloud',
+  q:"In one word: the biggest operational headache in your area right now?",hint:"One or two words.",
+  tip:"<b>Icebreaker</b> — point at the largest words: \u201cthis is what today is about.\u201d Compared with M15 at the close."},
+ {id:'M2',block:'Block 1 · Vision',kicker:'M2 · Scales',type:'scales',
+  q:"Rate LivaNova's digital maturity today.",hint:"1 = not at all · 5 = fully.",
+  statements:[{t:"Digital Operations",d:"Accurate, real-time data from our shop floor."},
+   {t:"Supply Chain",d:"Forecast \u2192 planning \u2192 supplier signals connected & reliable."},
+   {t:"Enterprise Data",d:"Documents, work instructions & knowledge easy to find and trust."},
+   {t:"AI-ready culture",d:"Teams ready and willing to work alongside AI."}],
+  tip:"<b>THE Pulse Check.</b> Read the SPREAD, not the mean. Expect Supply Chain & Enterprise Data low."},
+ {id:'M3',block:'Block 1 · Vision',kicker:'M3 · Word Cloud',type:'cloud',
+  q:"What does \u2018digitally mature\u2019 look like for LivaNova in 2026?",hint:"One or two words.",
+  tip:"Sets the aspiration. <b>Cuttable</b> if time is tight."},
+ {id:'M4',block:'Block 2 · Possible',kicker:'M4 · Multiple Choice',type:'choice',
+  q:"Which of these resonates most with your own week?",hint:"Pick one.",
+  options:[{k:'A',label:'Predict & Prevent',sub:'machine / planning failures'},
+   {k:'B',label:'See the Site',sub:'no real-time cross-functional visibility'},
+   {k:'C',label:'Know Before You Act',sub:'finding the right document / version'},
+   {k:'D',label:'Connect Knowledge',sub:'information scattered across systems'}],
+  tip:"Validates the 4-cluster synthesis live. Run straight after the verbatim pain reveal."},
+ {id:'M5',block:'Block 2 · Possible',kicker:'M5 · Open Ended',type:'open',
+  q:"Your use case in one line + the one number that would prove it worked.",hint:"e.g. \u201cCut SMD changeover scrap \u2014 metric: first-pass yield %\u201d",
+  tip:"Captures <b>Commitment #1</b>; feeds prioritisation in Block 4."},
+ {id:'M6',block:'Block 3 · Data',kicker:'M6 · Pin on Image',type:'pin',
+  q:"Plot the core data your use case needs.",hint:"Tap the grid. X = does it EXIST? · Y = is it TRUSTED?",
+  tip:"Live Data Readiness Heat Map. Then <b>reveal the LTTS pre-plot</b>. The point: exists \u2260 accurate."},
+ {id:'M7',block:'Block 3 · Data',kicker:'M7 · Open Ended',type:'open',
+  q:"Who actually owns this data today?",hint:"A name, a role, or \u2018no one\u2019.",
+  tip:"<b>Blank or contested answers are gold</b> \u2014 they become the data-owner line in the Block 5 charter."},
+ {id:'M8',block:'Block 4 · Prioritise',kicker:'M8 · Scales (per use case)',type:'scales',
+  q:"Score each shortlisted use case.",hint:"1 = low · 5 = high. Dark line = LTTS read.",
+  statements:[{t:"AI Production Scheduling & S&OP",d:"impact \u00d7 urgency \u00d7 feasibility \u00d7 data",ref:4.1},
+   {t:"Predictive Maintenance, SMD lines",d:"impact \u00d7 urgency \u00d7 feasibility \u00d7 data",ref:3.8},
+   {t:"GenAI Validation Docs & FAI",d:"impact \u00d7 urgency \u00d7 feasibility \u00d7 data",ref:4.3}],
+  tip:"Room composite vs LTTS read. <b>If they match, the choice is theirs; if not, follow the room.</b>"},
+ {id:'M9',block:'Block 4 · Prioritise',kicker:'M9 · Ranking',type:'rank',
+  q:"Rank the use cases for Phase 1.",hint:"Drag — top = highest priority.",
+  items:['AI Production Scheduling & S&OP','Predictive Maintenance, SMD lines','GenAI Validation Docs & FAI','Knowledge Graph (if Wenning is in the room)'],
+  tip:"Locks the collective priority order \u2014 the shortlist Block 6 commits to."},
+ {id:'M10',block:'Block 5 · Govern',kicker:'M10 · Open Ended',type:'open',multi:true,
+  q:"Where MUST a human stay in the loop, no matter how good the AI gets?",hint:"You can submit more than one.",
+  tip:"Builds the human-in-the-loop / MDR guardrail list from the room's own words."},
+ {id:'M11',block:'Block 5 · Govern',kicker:'M11 · Open Ended',type:'open',
+  q:"For your use case: who decides, who owns the data, who validates the output?",hint:"Three short answers in one line.",
+  tip:"Feeds the governance charter directly."},
+ {id:'M12',block:'Block 5 · Govern',kicker:'M12 · Word Cloud',type:'cloud',
+  q:"Biggest risk we must manage to do this responsibly?",hint:"One or two words.",
+  tip:"Names the fears so they can be addressed. <b>Cuttable</b> if time is tight."},
+ {id:'M13',block:'Block 6 · Commit',kicker:'M13 · Open Ended',type:'open',
+  q:"Your function: named use case + owner + first action + date.",hint:"e.g. \u201cOps \u2014 PdM SMD \u2014 owner J. Rivas \u2014 sensor audit \u2014 by 30 Jun\u201d",
+  tip:"<b>Commitments #1 and #4, in writing, in front of everyone. Do not skip.</b>"},
+ {id:'M14',block:'Block 6 · Commit',kicker:'M14 · Scales',type:'scales',
+  q:"How confident are you Phase 1 can start in two weeks?",hint:"1 = not confident · 5 = very confident.",
+  statements:[{t:"Phase 1 can start in two weeks",d:"How confident?"},{t:"Confidence in the data",d:"Does the data hold up?"}],
+  tip:"Surfaces blockers. <b>A low score is a question, not a failure \u2014 ask it out loud.</b>"},
+ {id:'M15',block:'Block 6 · Commit',kicker:'M15 · Word Cloud · BOOKEND',type:'bookend',
+  q:"One word: how do you feel about LivaNova's AI journey now?",hint:"One or two words.",
+  tip:"<b>Bookend</b> \u2014 shown beside M1. The shift from \u2018headaches\u2019 to \u2018momentum\u2019 is the close."},
+];
+const PREPLOT=[
+ {n:'Raphael',x:.80,y:.86,star:1},{n:'Rodrigue',x:.49,y:.66,star:1},{n:'Nasser',x:.66,y:.58,star:1},
+ {n:'Reinald',x:.55,y:.52},{n:'Richard Tienken',x:.84,y:.50,star:1},{n:'Wenning',x:.44,y:.57},
+ {n:'Kai',x:.30,y:.40},{n:'Thorsten',x:.38,y:.42},{n:'Juan',x:.22,y:.27},{n:'Matin (PILOT)',x:.78,y:.30,star:1}];
+
+/* ---------------- bootstrap ---------------- */
+const params=new URLSearchParams(location.search);
+const MODE=(params.get('mode')||'present').toLowerCase();
+const root=document.getElementById('root');
+const banner=document.getElementById('banner');
+function flash(msg,ok){banner.className=ok?'ok':'err';banner.textContent=msg;}
+
+const configured = SUPABASE_URL.startsWith('http') && SUPABASE_KEY.length>20 && !SUPABASE_KEY.includes('PASTE');
+let sb=null;
+if(configured){ sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
+
+if(!configured){ renderGate(); }
+else if(MODE==='vote'){ startVoter(); }
+else { startPresenter(); }
+
+/* a stable per-phone voter id so single-submit questions can de-dupe */
+function voterId(){
+  let v=null; try{v=localStorage.getItem('lv_vid')}catch(e){}
+  if(!v){ v='v'+Math.random().toString(36).slice(2,10); try{localStorage.setItem('lv_vid',v)}catch(e){} }
+  return v;
+}
+
+/* =========================================================
+   DATABASE HELPERS
+   table: responses(id bigint pk, session text, qid text, vid text, payload jsonb, created_at timestamptz)
+   ========================================================= */
+async function submit(qid, payload, dedupe){
+  const vid=voterId();
+  if(dedupe){
+    // overwrite this voter's previous answer for this question
+    await sb.from('responses').delete().match({session:SESSION,qid,vid});
+  }
+  const {error}=await sb.from('responses').insert({session:SESSION,qid,vid,payload});
+  if(error){ flash('Could not save — check connection. '+error.message,false); return false; }
+  return true;
+}
+async function loadAll(qid){
+  const {data,error}=await sb.from('responses').select('payload,vid').match({session:SESSION,qid});
+  if(error){ flash('Load error: '+error.message,false); return []; }
+  return data||[];
+}
+
+/* =========================================================
+   PRESENTER
+   ========================================================= */
+let cur=0, channel=null, cache={};
+function startPresenter(){
+  root.innerHTML=`
+   <div class="app">
+     <header>
+       <span class="brand">LivaNova <b>×</b> LTTS · AI Workshop</span>
+       <span class="pill" id="blockTag">Join</span>
+       <span class="spacer"></span>
+       <span class="qcount" id="qcount"></span>
+     </header>
+     <div class="rail" id="rail"></div>
+     <div class="stage" id="stage"></div>
+     <div class="navbar">
+       <span class="meta">← → to move · realtime: phones update this screen live</span>
+       <button class="reset-mini" onclick="resetSession()">reset this session</button>
+       <div class="nav-btns">
+         <button class="btn ghost" onclick="go(-1)">← Prev</button>
+         <button class="btn primary" onclick="go(1)">Next →</button>
+       </div>
+     </div>
+   </div>`;
+  const rail=document.getElementById('rail');
+  // slide 0 = join screen, then 15 questions
+  const seg0=document.createElement('div');seg0.className='seg';seg0.onclick=()=>jump(0);rail.appendChild(seg0);
+  SLIDES.forEach((s,i)=>{const seg=document.createElement('div');seg.className='seg';seg.title=s.id;seg.onclick=()=>jump(i+1);rail.appendChild(seg);});
+  buildStage();
+  subscribeRealtime();
+  document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1);});
+  show(0);
+  flash('Connected to Supabase ✓',true);
+}
+
+function buildStage(){
+  const stage=document.getElementById('stage');
+  // join slide
+  const join=document.createElement('div');join.className='slide';join.dataset.idx='0';
+  const voteUrl=location.origin+location.pathname+'?mode=vote';
+  join.innerHTML=`<div class="joinslide">
+     <div class="kicker">Scan to join · one code, all day</div>
+     <h2>Open the poll on your phone</h2>
+     <div id="qrbox"></div>
+     <div class="joinurl">${voteUrl}</div>
+     <div style="font-size:13px;color:var(--muted)">No app, no login. Stay on the page — questions change as we go.</div>
+   </div>`;
+  stage.appendChild(join);
+  new QRCode(join.querySelector('#qrbox'),{text:voteUrl,width:230,height:230,colorDark:'#112868',colorLight:'#ffffff'});
+
+  SLIDES.forEach((s,i)=>{
+    const el=document.createElement('div');el.className='slide';el.dataset.idx=String(i+1);el.dataset.id=s.id;
+    el.innerHTML=`
+      <div class="kicker">${s.kicker}</div>
+      <div class="qtitle">${s.q}</div>
+      <div class="qhint">${s.hint}</div>
+      <div class="viz"><div class="viz-head"><span class="lbl">Live results</span><span class="resp" id="resp-${s.id}">0</span></div>
+        <div class="viz-body" id="viz-${s.id}"></div></div>
+      <div class="live-tip"><b>Facilitator:</b> ${s.tip}</div>`;
+    stage.appendChild(el);
+  });
+}
+
+function subscribeRealtime(){
+  channel=sb.channel('rt-'+SESSION)
+    .on('postgres_changes',{event:'*',schema:'public',table:'responses',filter:'session=eq.'+SESSION},
+      payload=>{ const qid=(payload.new&&payload.new.qid)||(payload.old&&payload.old.qid); if(qid){ refresh(qid); } })
+    .subscribe();
+}
+
+async function refresh(qid){
+  const s=SLIDES.find(x=>x.id===qid); if(!s) return;
+  const rows=await loadAll(qid); cache[qid]=rows;
+  const r=document.getElementById('resp-'+qid);
+  if(s.type==='cloud'||s.type==='bookend') drawCloud(s,rows);
+  else if(s.type==='open'){ if(r)r.textContent=rows.length; drawOpen(s,rows); }
+  else if(s.type==='choice') drawBars(s,rows);
+  else if(s.type==='scales') drawScales(s,rows);
+  else if(s.type==='pin') drawPins(s,rows);
+  else if(s.type==='rank') drawRank(s,rows);
+}
+
+/* ---- presenter drawing ---- */
+function drawCloud(s,rows){
+  const box=document.getElementById('viz-'+s.id);
+  const r=document.getElementById('resp-'+s.id);
+  const words=rows.map(x=>(x.payload.word||'').toLowerCase()).filter(Boolean);
+  if(r)r.textContent=words.length+' words';
+  if(!words.length){box.innerHTML='<div class="empty">Words float in as people answer…</div>';return;}
+  const freq={};words.forEach(w=>freq[w]=(freq[w]||0)+1);
+  const max=Math.max(...Object.values(freq));
+  const items=Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+  // animated layout: spiral placement around centre
+  if(!box.querySelector('.cloudwrap')) box.innerHTML='<div class="cloudwrap"></div>';
+  const wrap=box.querySelector('.cloudwrap');
+  const seen={};[...wrap.children].forEach(c=>seen[c.dataset.w]=c);
+  const W=wrap.clientWidth||800,H=wrap.clientHeight||400;
+  items.forEach(([w,c],i)=>{
+    const size=20+(c/max)*54;
+    let span=seen[w];
+    if(!span){span=document.createElement('span');span.className='cw';span.dataset.w=w;span.textContent=w;wrap.appendChild(span);requestAnimationFrame(()=>span.classList.add('in'));}
+    span.style.color=PALETTE[i%PALETTE.length];span.style.fontSize=size+'px';span.style.zIndex=String(100-i);
+    // spiral coords
+    const ang=i*2.399, rad=(i===0?0:14+i*16);
+    const x=W/2+Math.cos(ang)*rad*(W/H>1.6?1.4:1);
+    const y=H/2+Math.sin(ang)*rad*0.8;
+    span.style.left=Math.max(8,Math.min(W-8,x))+'px';
+    span.style.top=Math.max(20,Math.min(H-20,y))+'px';
+    delete seen[w];
+  });
+  Object.values(seen).forEach(el=>el.remove());
+}
+function drawOpen(s,rows){
+  const box=document.getElementById('viz-'+s.id);
+  if(!rows.length){box.innerHTML='<div class="empty">Submitted lines appear here.</div>';return;}
+  box.innerHTML=rows.map(x=>`<div class="txtcard">${esc(x.payload.text||'')}</div>`).join('');
+}
+function drawBars(s,rows){
+  const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
+  const c={};rows.forEach(x=>{const k=x.payload.choice;if(k)c[k]=(c[k]||0)+1;});
+  const total=rows.length;if(r)r.textContent=total+' votes';
+  box.innerHTML='<div class="bars">'+s.options.map(o=>{
+    const n=c[o.k]||0,pct=total?Math.round(n/total*100):0;
+    return `<div class="bar-row"><div class="bl"><span><b>${o.k}</b> · ${o.label}</span><span class="pct">${pct}% · ${n}</span></div>
+      <div class="track"><div class="fill ${o.k}" style="width:${pct}%"></div></div></div>`;}).join('')+'</div>';
+}
+function drawScales(s,rows){
+  const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
+  if(r)r.textContent=rows.length+' submissions';
+  const byStmt=s.statements.map((_,i)=>rows.map(x=>x.payload.scores&&x.payload.scores[i]).filter(v=>v));
+  box.innerHTML=s.statements.map((st,i)=>{
+    const data=byStmt[i];const mean=data.length?data.reduce((a,b)=>a+b,0)/data.length:null;
+    const ticks=[1,2,3,4,5].map(n=>`<span class="tick" style="left:${(n-1)/4*100}%">${n}</span>`).join('');
+    const dots=data.map((v,k)=>`<span class="dot" style="left:${(v-1)/4*100}%;top:calc(50% + ${Math.sin(k*9.7)*8}px)"></span>`).join('');
+    const ref=st.ref!==undefined?`<span class="meanline" data-m="LTTS ${st.ref}" style="left:${(st.ref-1)/4*100}%;background:#9aa9c4"></span>`:'';
+    const ml=mean!==null?`<span class="meanline" data-m="\u2300 ${mean.toFixed(1)}" style="left:${(mean-1)/4*100}%"></span>`:'';
+    return `<div class="scale-block"><div class="st">${st.t}</div><div class="sd">${st.d}</div>
+      <div class="dotline">${dots}${ref}${ml}${ticks}</div></div>`;}).join('');
+}
+function drawPins(s,rows){
+  const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
+  if(r)r.textContent=rows.length+' pins';
+  if(!box.querySelector('.quad')){
+    box.innerHTML=`<div class="quad-wrap">
+      <div class="quad-title"><span>Where does your data sit?</span>
+        <span class="leg">\u25cf live pin · \u2b21 LTTS pre-plot</span>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;margin-left:auto" id="prebtn-${s.id}">Reveal LTTS pre-plot</button></div>
+      <div style="position:relative;flex:1;display:flex">
+        <div class="axis-y">Is it accurate / trusted?</div>
+        <div style="flex:1;display:flex;flex-direction:column;margin-left:18px">
+          <div class="quad" id="quad-${s.id}">
+            <div class="q-tl"></div><div class="q-tr"></div><div class="q-bl"></div><div class="q-br"></div>
+            <span class="q-lab tl">Quick instrumentation win</span><span class="q-lab tr">PHASE 1 · build now</span>
+            <span class="q-lab bl">Phase 2+ · data programme first</span><span class="q-lab br">PHASE 1 · fix accuracy first</span>
+          </div>
+          <div class="axis-x">Does the data exist? &nbsp; none → fully digital</div>
+        </div></div></div>`;
+    box.querySelector('#prebtn-'+s.id).onclick=()=>{box.dataset.pre=box.dataset.pre?'':'1';drawPins(s,cache[s.id]||[]);box.querySelector('#prebtn-'+s.id).textContent=box.dataset.pre?'Hide LTTS pre-plot':'Reveal LTTS pre-plot';};
+  }
+  const q=box.querySelector('#quad-'+s.id);
+  q.querySelectorAll('.pin,.pin-name').forEach(e=>e.remove());
+  rows.forEach(x=>{const p=x.payload;if(p&&p.x!=null){const d=document.createElement('div');d.className='pin';d.style.left=p.x*100+'%';d.style.top=(1-p.y)*100+'%';q.appendChild(d);}});
+  if(box.dataset.pre){PREPLOT.forEach(p=>{
+    const d=document.createElement('div');d.className='pin pre';d.style.left=p.x*100+'%';d.style.top=(1-p.y)*100+'%';if(p.star)d.style.borderColor='#c79a1e';q.appendChild(d);
+    const l=document.createElement('div');l.className='pin-name';l.textContent=(p.star?'\u2605 ':'')+p.n;l.style.left=p.x*100+'%';l.style.top=(1-p.y)*100+'%';q.appendChild(l);});}
+}
+function drawRank(s,rows){
+  const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
+  if(r)r.textContent=rows.length+' rankings';
+  // Borda count: position 0 (top) gets max points
+  const N=s.items.length;const pts={};s.items.forEach(it=>pts[it]=0);
+  rows.forEach(x=>{(x.payload.order||[]).forEach((it,idx)=>{if(pts[it]!=null)pts[it]+=(N-idx);});});
+  const ranked=rows.length?Object.entries(pts).sort((a,b)=>b[1]-a[1]).map(e=>e[0]):s.items;
+  box.innerHTML='<div class="rank-list">'+ranked.map((it,i)=>`<div class="rank-item"><span class="num">${i+1}</span><span>${it}</span><span class="score">${rows.length?pts[it]+' pts':''}</span></div>`).join('')+'</div>';
+}
+
+function show(i){
+  cur=Math.max(0,Math.min(SLIDES.length,i));
+  const stage=document.getElementById('stage');
+  [...stage.children].forEach(el=>el.classList.toggle('show',+el.dataset.idx===cur));
+  [...document.getElementById('rail').children].forEach((seg,k)=>{seg.classList.toggle('active',k===cur);seg.classList.toggle('done',k<cur);});
+  const tag=document.getElementById('blockTag'),qc=document.getElementById('qcount');
+  if(cur===0){tag.textContent='Join';qc.textContent='Scan to join';}
+  else{const s=SLIDES[cur-1];tag.textContent=s.block;qc.textContent=s.id+' / 15';refresh(s.id);if(s.type==='bookend'){refreshBookendStart();}}
+  broadcastSlide();
+}
+async function refreshBookendStart(){ /* M15 shows its own cloud; M1 compare is implicit via narration */ }
+function go(d){show(cur+d);}
+function jump(i){show(i);}
+async function resetSession(){
+  if(!confirm('Delete ALL responses for this session?'))return;
+  const {error}=await sb.from('responses').delete().eq('session',SESSION);
+  if(error){flash('Reset failed: '+error.message,false);return;}
+  cache={};SLIDES.forEach(s=>refresh(s.id));flash('Session cleared ✓',true);
+}
+
+/* =========================================================
+   VOTER (phone)
+   ========================================================= */
+let vCurrent=null, vPoll=null, vDone={};
+function startVoter(){
+  root.innerHTML=`<div class="voter">
+     <div class="vhead"><div class="vbrand">LivaNova <b>×</b> LTTS · AI Workshop</div>
+       <div class="vstatus" id="vstatus">Connecting…</div></div>
+     <div class="vcard" id="vcard"><div class="vwait">Waiting for the facilitator to start…</div></div>
+   </div>`;
+  flash('Connected ✓',true);
+  // voters poll the "current slide" via a lightweight presence: we use the URL hash the presenter could set,
+  // but simplest robust approach — let the phone pick the question itself from a tiny dropdown is bad UX.
+  // Instead: phone follows whatever the PRESENTER broadcasts on the realtime channel.
+  const ch=sb.channel('rt-'+SESSION,{config:{broadcast:{self:false}}});
+  ch.on('broadcast',{event:'slide'},({payload})=>{ renderVoter(payload.id); })
+    .subscribe(status=>{ document.getElementById('vstatus').textContent = status==='SUBSCRIBED'?'Connected — follow the screen':'Reconnecting…'; });
+  // Also let the phone request current slide on join:
+  setTimeout(()=>ch.send({type:'broadcast',event:'whereare',payload:{}}),600);
+  window._voterChannel=ch;
+}
+function renderVoter(qid){
+  const s=SLIDES.find(x=>x.id===qid);if(!s)return;vCurrent=s;
+  const card=document.getElementById('vcard');
+  if(vDone[qid] && !s.multi){ card.innerHTML=`<div class="vthanks"><div class="big">✓</div><div style="font-weight:700;color:var(--blue-d)">Answer sent</div><div style="color:var(--muted);margin-top:6px">Look up at the screen.</div></div>`;return; }
+  let inner='';
+  if(s.type==='cloud'||s.type==='bookend'){
+    inner=`<input type="text" id="vin" placeholder="type a word…" autocomplete="off"><button class="vbtn" onclick="vWord('${qid}')">Send</button>`;
+  } else if(s.type==='open'){
+    inner=`<textarea id="vin" placeholder="type your answer…"></textarea><button class="vbtn" onclick="vText('${qid}')">Send</button>`;
+  } else if(s.type==='choice'){
+    inner=s.options.map(o=>`<button class="vopt" onclick="vChoice('${qid}','${o.k}')"><b>${o.k} — ${o.label}</b><span class="vsub">${o.sub}</span></button>`).join('');
+  } else if(s.type==='scales'){
+    inner=s.statements.map((st,i)=>`<div class="vstmt">${st.t}</div><div class="vscale-lbl"><span>low</span><span>high</span></div>
+      <div class="vscale" id="vsc-${i}">${[1,2,3,4,5].map(n=>`<button onclick="vScalePick(${i},${n})">${n}</button>`).join('')}</div>`).join('')
+      +`<button class="vbtn" id="vsbtn" onclick="vScaleSend('${qid}')" disabled>Send</button>`;
+    vScaleState=s.statements.map(()=>null);
+  } else if(s.type==='pin'){
+    inner=`<div class="vquad" id="vquad">
+      <div class="qq q-tl"><span class="q-lab tl">Quick win</span></div><div class="qq q-tr"><span class="q-lab tr">Build now</span></div>
+      <div class="qq q-bl"><span class="q-lab bl">Data first</span></div><div class="qq q-br"><span class="q-lab br">Fix accuracy</span></div></div>
+      <div style="font-size:12px;color:var(--muted);text-align:center">← exist? → &nbsp;·&nbsp; ↑ trusted ↑</div>
+      <button class="vbtn" id="vpbtn" onclick="vPinSend('${qid}')" disabled>Send pin</button>`;
+  } else if(s.type==='rank'){
+    inner=`<div class="vranklist" id="vrank"></div><button class="vbtn" onclick="vRankSend('${qid}')">Send ranking</button>`;
+  }
+  card.innerHTML=`<div class="vkicker">${s.kicker.split('·')[1]||s.kicker}</div><div class="vq">${s.q}</div><div class="vhint">${s.hint}</div>${inner}`;
+  if(s.type==='pin') initVPin();
+  if(s.type==='rank') initVRank(s);
+  const vin=document.getElementById('vin');if(vin){vin.focus();vin.onkeydown=e=>{if(e.key==='Enter'&&s.type!=='open'){e.preventDefault();vWord(qid);}};}
+}
+let vScaleState=[], vPinXY=null, vRankOrder=[];
+async function vWord(qid){const el=document.getElementById('vin');const w=(el.value||'').trim();if(!w)return;if(await submit(qid,{word:w},false)){vAck(qid);}}
+async function vText(qid){const el=document.getElementById('vin');const t=(el.value||'').trim();if(!t)return;const s=SLIDES.find(x=>x.id===qid);if(await submit(qid,{text:t},!s.multi)){if(s.multi){el.value='';flash('Sent — add another ✓',true);}else vAck(qid);}}
+async function vChoice(qid,k){document.querySelectorAll('.vopt').forEach(b=>b.classList.remove('sel'));event.target.closest('.vopt').classList.add('sel');if(await submit(qid,{choice:k},true))vAck(qid);}
+function vScalePick(i,n){vScaleState[i]=n;const wrap=document.getElementById('vsc-'+i);[...wrap.children].forEach((b,k)=>b.classList.toggle('sel',k===n-1));if(vScaleState.every(v=>v))document.getElementById('vsbtn').disabled=false;}
+async function vScaleSend(qid){if(!vScaleState.every(v=>v))return;if(await submit(qid,{scores:vScaleState},true))vAck(qid);}
+function initVPin(){const q=document.getElementById('vquad');const set=ev=>{const t=ev.touches?ev.touches[0]:ev;const r=q.getBoundingClientRect();const x=(t.clientX-r.left)/r.width,y=(t.clientY-r.top)/r.height;vPinXY={x:Math.max(0,Math.min(1,x)),y:Math.max(0,Math.min(1,1-y))};q.querySelectorAll('.vpin').forEach(e=>e.remove());const d=document.createElement('div');d.className='vpin';d.style.left=vPinXY.x*100+'%';d.style.top=(1-vPinXY.y)*100+'%';q.appendChild(d);document.getElementById('vpbtn').disabled=false;};
+  q.addEventListener('click',set);q.addEventListener('touchstart',e=>{e.preventDefault();set(e);},{passive:false});}
+async function vPinSend(qid){if(!vPinXY)return;if(await submit(qid,{x:vPinXY.x,y:vPinXY.y},true))vAck(qid);}
+function initVRank(s){vRankOrder=[...s.items];const list=document.getElementById('vrank');
+  const render=()=>{list.innerHTML='';vRankOrder.forEach((it,i)=>{const d=document.createElement('div');d.className='vrank-item';d.draggable=true;d.innerHTML=`<span class="num">${i+1}</span><span>${it}</span><span class="grip">☰</span>`;
+    d.addEventListener('dragstart',e=>e.dataTransfer.setData('t',i));d.addEventListener('dragover',e=>e.preventDefault());
+    d.addEventListener('drop',e=>{e.preventDefault();const f=+e.dataTransfer.getData('t');const[m]=vRankOrder.splice(f,1);vRankOrder.splice(i,0,m);render();});
+    // touch reorder: tap to move up
+    let ts;d.addEventListener('touchstart',()=>ts=Date.now());d.addEventListener('touchend',()=>{if(Date.now()-ts<250&&i>0){const[m]=vRankOrder.splice(i,1);vRankOrder.splice(i-1,0,m);render();}});
+    list.appendChild(d);});};
+  render();
+  const note=document.createElement('div');note.style.cssText='font-size:12px;color:var(--muted);margin-bottom:10px';note.textContent='Drag to reorder · on phone, tap a card to nudge it up.';list.parentNode.insertBefore(note,list);}
+async function vRankSend(qid){if(await submit(qid,{order:vRankOrder},true))vAck(qid);}
+function vAck(qid){vDone[qid]=true;const card=document.getElementById('vcard');card.innerHTML=`<div class="vthanks"><div class="big">✓</div><div style="font-weight:700;color:var(--blue-d)">Answer sent</div><div style="color:var(--muted);margin-top:6px">Look up at the screen.</div></div>`;}
+
+/* presenter broadcasts current slide so phones follow automatically */
+function broadcastSlide(){ if(channel&&cur>=1){ channel.send({type:'broadcast',event:'slide',payload:{id:SLIDES[cur-1].id}}); } }
+// answer phones that just joined and asked "whereare"
+if(MODE!=='vote'){
+  const tryHook=setInterval(()=>{ if(channel){ clearInterval(tryHook);
+    channel.on('broadcast',{event:'whereare'},()=>broadcastSlide()); } },300);
+}
+
+/* =========================================================
+   SETUP GATE (shown until you paste the two values)
+   ========================================================= */
+function renderGate(){
+  root.innerHTML=`<div class="gate">
+    <h1>Almost there — 4 quick setup steps</h1>
+    <p>This file just needs your own free Supabase project to carry the live votes. ~10 minutes, once.</p>
+    <ol>
+      <li>Go to <code>database.new</code>, sign in, and create a project (any name; pick a region near your venue).</li>
+      <li>Open the project's <b>SQL Editor</b>, paste the block below, and click <b>Run</b>. It makes one table and turns on realtime + open access for the workshop.</li>
+      <li>Open <b>Project → Connect</b> (or Settings → API). Copy the <b>Project URL</b> and the <b>anon / publishable key</b>.</li>
+      <li>Open this HTML file in a text editor, find <code>STEP 3</code> near the top of the script, paste both values between the quotes, save, and reopen.</li>
+    </ol>
+    <p><b>SQL to paste in step 2:</b></p>
+    <pre>create table if not exists responses (
+  id bigint generated always as identity primary key,
+  session text not null,
+  qid text not null,
+  vid text,
+  payload jsonb not null,
+  created_at timestamptz default now()
+);
+alter table responses enable row level security;
+create policy "workshop open access" on responses
+  for all to anon using (true) with check (true);
+alter publication supabase_realtime add table responses;</pre>
+    <p style="font-size:13px;color:var(--muted)">Note: this opens the table to anyone with the link for the day — fine for a workshop. To lock it afterwards, delete the project or the policy. Realtime sessions on the free tier run up to 24h, plenty for a workshop day.</p>
+  </div>`;
+}
+</script>
+</body>
+</html>
