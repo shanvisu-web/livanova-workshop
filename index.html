@@ -9,7 +9,6 @@
 
 <!-- Supabase JS v2 + QR code lib -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <style>
   /* ============================================================
@@ -334,15 +333,20 @@ function buildStage(){
   // join slide
   const join=document.createElement('div');join.className='slide';join.dataset.idx='0';
   const voteUrl=location.origin+location.pathname+'?mode=vote';
+  const enc=encodeURIComponent(voteUrl);
+  const qr1='https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data='+enc;
+  const qr2='https://quickchart.io/qr?size=260&text='+enc;
   join.innerHTML=`<div class="joinslide">
      <div class="kicker">Scan to join · one code, all day</div>
      <h2>Open the poll on your phone</h2>
-     <div id="qrbox"></div>
-     <div class="joinurl">${voteUrl}</div>
-     <div style="font-size:13px;color:var(--muted)">No app, no login. Stay on the page — questions change as we go.</div>
+     <div id="qrbox"><img id="qrimg" alt="QR code to join" width="260" height="260" style="display:block"></div>
+     <a class="joinurl" href="${voteUrl}" target="_blank" style="display:inline-block;background:var(--blue);color:#fff;padding:12px 20px;border-radius:10px;font-weight:700;text-decoration:none">${voteUrl}</a>
+     <div style="font-size:13px;color:var(--muted)">No app, no login. Scan the QR, or type the link above into a phone browser. Stay on the page — questions change as we go.</div>
    </div>`;
   stage.appendChild(join);
-  new QRCode(join.querySelector('#qrbox'),{text:voteUrl,width:230,height:230,colorDark:'#112868',colorLight:'#ffffff'});
+  const qimg=join.querySelector('#qrimg');
+  qimg.onerror=()=>{ if(qimg.src!==qr2) qimg.src=qr2; };
+  qimg.src=qr1;
 
   SLIDES.forEach((s,i)=>{
     const el=document.createElement('div');el.className='slide';el.dataset.idx=String(i+1);el.dataset.id=s.id;
