@@ -179,7 +179,7 @@
    Leave the quotes. Do NOT paste the secret/service_role key.
    ============================================================ */
 const SUPABASE_URL = "https://napizlfntbxnctwmmmdg.supabase.co";
-const SUPABASE_KEY = "sb_publishable_b-i4jOVOQ3EhRmcRJ5p08Q_VUFyLaXt";
+const SUPABASE_KEY = "PASTE_YOUR_ANON_OR_PUBLISHABLE_KEY_HERE";
 
 /* one shared session id — change to run a fresh, empty session */
 const SESSION = "livanova-2026";
@@ -322,10 +322,10 @@ function startPresenter(){
   const seg0=document.createElement('div');seg0.className='seg';seg0.onclick=()=>jump(0);rail.appendChild(seg0);
   SLIDES.forEach((s,i)=>{const seg=document.createElement('div');seg.className='seg';seg.title=s.id;seg.onclick=()=>jump(i+1);rail.appendChild(seg);});
   buildStage();
-  subscribeRealtime();
   document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(1);if(e.key==='ArrowLeft')go(-1);});
   show(0);
-  flash('Connected to Supabase ✓',true);
+  try{ subscribeRealtime(); flash('Connected to Supabase ✓',true); }
+  catch(e){ flash('Live sync issue (page still works): '+e.message,false); }
 }
 
 function buildStage(){
@@ -362,10 +362,16 @@ function buildStage(){
 }
 
 function subscribeRealtime(){
-  channel=sb.channel('rt-'+SESSION)
-    .on('postgres_changes',{event:'*',schema:'public',table:'responses',filter:'session=eq.'+SESSION},
-      payload=>{ const qid=(payload.new&&payload.new.qid)||(payload.old&&payload.old.qid); if(qid){ refresh(qid); } })
-    .subscribe();
+  // defer so the Supabase client + socket are fully ready before opening the channel
+  setTimeout(()=>{
+    try{
+      channel=sb.channel('rt-'+SESSION)
+        .on('postgres_changes',{event:'*',schema:'public',table:'responses',filter:'session=eq.'+SESSION},
+          payload=>{ const qid=(payload.new&&payload.new.qid)||(payload.old&&payload.old.qid); if(qid){ refresh(qid); } })
+        .on('broadcast',{event:'whereare'},()=>broadcastSlide())
+        .subscribe(st=>{ if(st==='SUBSCRIBED'){ flash('Live sync on ✓',true); broadcastSlide(); } });
+    }catch(e){ flash('Live sync issue (page still works): '+e.message,false); }
+  }, 300);
 }
 
 async function refresh(qid){
@@ -568,11 +574,6 @@ function vAck(qid){vDone[qid]=true;const card=document.getElementById('vcard');c
 
 /* presenter broadcasts current slide so phones follow automatically */
 function broadcastSlide(){ if(channel&&cur>=1){ channel.send({type:'broadcast',event:'slide',payload:{id:SLIDES[cur-1].id}}); } }
-// answer phones that just joined and asked "whereare"
-if(MODE!=='vote'){
-  const tryHook=setInterval(()=>{ if(channel){ clearInterval(tryHook);
-    channel.on('broadcast',{event:'whereare'},()=>broadcastSlide()); } },300);
-}
 
 /* =========================================================
    SETUP GATE (shown until you paste the two values)
