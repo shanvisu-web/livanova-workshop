@@ -306,6 +306,7 @@ function startPresenter(){
      <div class="stage" id="stage"></div>
      <div class="navbar">
        <span class="meta">← → to move · realtime: phones update this screen live</span>
+       <button class="btn ghost" style="padding:8px 14px;font-size:13px" onclick="exportResults()">⬇ Export results</button>
        <button class="reset-mini" onclick="resetSession()">reset this session</button>
        <div class="nav-btns">
          <button class="btn ghost" onclick="go(-1)">← Prev</button>
@@ -500,6 +501,55 @@ async function resetSession(){
   const {error}=await sb.from('responses').delete().eq('session',SESSION);
   if(error){flash('Reset failed: '+error.message,false);return;}
   cache={};SLIDES.forEach(s=>refresh(s.id));flash('Session cleared ✓',true);
+}
+
+async function exportResults(){
+  flash('Gathering responses…',true);
+  const {data,error}=await sb.from('responses').select('qid,payload,created_at').eq('session',SESSION).order('created_at',{ascending:true});
+  if(error){ flash('Export failed: '+error.message,false); return; }
+  const rows=data||[];
+  const byQ={}; rows.forEach(r=>{ (byQ[r.qid]=byQ[r.qid]||[]).push(r.payload); });
+  const stamp=new Date().toISOString().slice(0,16).replace('T',' ');
+  let out='LivaNova × LTTS — AI Workshop · Live Poll Results\n';
+  out+='Session: '+SESSION+'   Exported: '+stamp+'   Total responses: '+rows.length+'\n';
+  out+='='.repeat(64)+'\n\n';
+  SLIDES.forEach(s=>{
+    const list=byQ[s.id]||[];
+    out+=s.id+' — '+s.q+'\n';
+    out+='('+s.kicker+')   '+list.length+' response(s)\n';
+    if(!list.length){ out+='   — no responses —\n\n'; return; }
+    if(s.type==='cloud'||s.type==='bookend'){
+      const f={}; list.forEach(p=>{const w=(p.word||'').toLowerCase(); if(w)f[w]=(f[w]||0)+1;});
+      Object.entries(f).sort((a,b)=>b[1]-a[1]).forEach(([w,c])=>out+='   '+c+'×  '+w+'\n');
+    } else if(s.type==='open'){
+      list.forEach(p=>{ if(p.text) out+='   • '+p.text+'\n'; });
+    } else if(s.type==='choice'){
+      const f={}; list.forEach(p=>{if(p.choice)f[p.choice]=(f[p.choice]||0)+1;});
+      s.options.forEach(o=>out+='   '+o.k+' '+o.label+': '+(f[o.k]||0)+'\n');
+    } else if(s.type==='scales'){
+      s.statements.forEach((st,i)=>{
+        const vals=list.map(p=>p.scores&&p.scores[i]).filter(v=>v);
+        const mean=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2):'—';
+        out+='   '+st.t+': mean '+mean+'  (n='+vals.length+')'+(st.ref!==undefined?'  [LTTS ref '+st.ref+']':'')+'\n';
+      });
+    } else if(s.type==='pin'){
+      const n=list.length;
+      const avgX=n?(list.reduce((a,p)=>a+(p.x||0),0)/n).toFixed(2):'—';
+      const avgY=n?(list.reduce((a,p)=>a+(p.y||0),0)/n).toFixed(2):'—';
+      out+='   '+n+' pins · avg position  exists='+avgX+'  trusted='+avgY+'  (0–1 scale)\n';
+    } else if(s.type==='rank'){
+      const N=s.items.length; const pts={}; s.items.forEach(it=>pts[it]=0);
+      list.forEach(p=>(p.order||[]).forEach((it,idx)=>{if(pts[it]!=null)pts[it]+=(N-idx);}));
+      Object.entries(pts).sort((a,b)=>b[1]-a[1]).forEach(([it,p],i)=>out+='   '+(i+1)+'. '+it+'  ('+p+' pts)\n');
+    }
+    out+='\n';
+  });
+  const blob=new Blob([out],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='LivaNova_Workshop_Results_'+stamp.replace(/[: ]/g,'-')+'.txt';
+  document.body.appendChild(a); a.click(); a.remove();
+  flash('Results downloaded ✓',true);
 }
 
 /* =========================================================
