@@ -549,7 +549,19 @@ async function exportResults(){
   a.href=URL.createObjectURL(blob);
   a.download='LivaNova_Workshop_Results_'+stamp.replace(/[: ]/g,'-')+'.txt';
   document.body.appendChild(a); a.click(); a.remove();
-  flash('Results downloaded ✓',true);
+  // also export structured JSON for the Word report generator
+  const jslides=SLIDES.map(s=>({id:s.id,type:s.type,q:s.q,kicker:s.kicker,
+    statements:s.statements?s.statements.map(x=>({t:x.t,ref:x.ref})):undefined,
+    options:s.options?s.options.map(o=>({k:o.k,label:o.label})):undefined,
+    items:s.items}));
+  const jdata={session:SESSION,exported:stamp,total:rows.length,
+    slides:jslides, responses:byQ};
+  const jblob=new Blob([JSON.stringify(jdata,null,2)],{type:'application/json'});
+  const ja=document.createElement('a');
+  ja.href=URL.createObjectURL(jblob);
+  ja.download='LivaNova_Workshop_Results_'+stamp.replace(/[: ]/g,'-')+'.json';
+  document.body.appendChild(ja); ja.click(); ja.remove();
+  flash('Results downloaded (text + JSON) ✓',true);
 }
 
 /* =========================================================
