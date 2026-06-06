@@ -262,10 +262,6 @@ const configured = SUPABASE_URL.startsWith('http') && SUPABASE_KEY.length>20 && 
 let sb=null;
 if(configured){ sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
 
-if(!configured){ renderGate(); }
-else if(MODE==='vote'){ startVoter(); }
-else { startPresenter(); }
-
 /* a stable per-phone voter id so single-submit questions can de-dupe */
 function voterId(){
   let v=null; try{v=localStorage.getItem('lv_vid')}catch(e){}
@@ -334,19 +330,25 @@ function buildStage(){
   const join=document.createElement('div');join.className='slide';join.dataset.idx='0';
   const voteUrl=location.origin+location.pathname+'?mode=vote';
   const enc=encodeURIComponent(voteUrl);
-  const qr1='https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data='+enc;
-  const qr2='https://quickchart.io/qr?size=260&text='+enc;
+  // Text content renders first and never depends on the QR loading.
   join.innerHTML=`<div class="joinslide">
      <div class="kicker">Scan to join · one code, all day</div>
      <h2>Open the poll on your phone</h2>
-     <div id="qrbox"><img id="qrimg" alt="QR code to join" width="260" height="260" style="display:block"></div>
-     <a class="joinurl" href="${voteUrl}" target="_blank" style="display:inline-block;background:var(--blue);color:#fff;padding:12px 20px;border-radius:10px;font-weight:700;text-decoration:none">${voteUrl}</a>
-     <div style="font-size:13px;color:var(--muted)">No app, no login. Scan the QR, or type the link above into a phone browser. Stay on the page — questions change as we go.</div>
+     <div id="qrbox" style="min-height:60px"></div>
+     <a class="joinurl" href="${voteUrl}" target="_blank" style="display:inline-block;background:var(--blue);color:#fff;padding:14px 22px;border-radius:10px;font-weight:700;text-decoration:none;font-size:16px">Tap or type this link &nbsp;→&nbsp; ${voteUrl}</a>
+     <div style="font-size:13px;color:var(--muted)">No app, no login. Scan the QR or type the link into a phone browser. Stay on the page — questions change as we go.</div>
    </div>`;
   stage.appendChild(join);
-  const qimg=join.querySelector('#qrimg');
-  qimg.onerror=()=>{ if(qimg.src!==qr2) qimg.src=qr2; };
-  qimg.src=qr1;
+  // Try to draw a QR via image services; if both fail, show a friendly note (the link above still works).
+  const box=join.querySelector('#qrbox');
+  const qr1='https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=0&data='+enc;
+  const qr2='https://quickchart.io/qr?size=260&text='+enc;
+  const img=new Image(260,260);
+  img.alt='QR code to join'; img.style.display='block'; img.style.margin='0 auto';
+  let tried=0;
+  img.onload=()=>{ box.innerHTML=''; box.appendChild(img); };
+  img.onerror=()=>{ tried++; if(tried===1){ img.src=qr2; } else { box.innerHTML='<div style="font-size:13px;color:var(--muted)">(QR couldn\'t load — use the link below instead.)</div>'; } };
+  img.src=qr1;
 
   SLIDES.forEach((s,i)=>{
     const el=document.createElement('div');el.className='slide';el.dataset.idx=String(i+1);el.dataset.id=s.id;
@@ -604,6 +606,11 @@ alter publication supabase_realtime add table responses;</pre>
     <p style="font-size:13px;color:var(--muted)">Note: this opens the table to anyone with the link for the day — fine for a workshop. To lock it afterwards, delete the project or the policy. Realtime sessions on the free tier run up to 24h, plenty for a workshop day.</p>
   </div>`;
 }
+
+/* ===== bootstrap LAST, after everything is defined ===== */
+if(!configured){ renderGate(); }
+else if(MODE==='vote'){ startVoter(); }
+else { startPresenter(); }
 </script>
 </body>
 </html>
