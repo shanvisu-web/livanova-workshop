@@ -201,12 +201,15 @@ const SLIDES=[
   q:"What does \u2018digitally mature\u2019 look like for LivaNova in 2026?",hint:"One or two words.",
   tip:"Sets the aspiration. <b>Cuttable</b> if time is tight."},
  {id:'M4',block:'Block 2 · Possible',kicker:'M4 · Multiple Choice',type:'choice',
-  q:"Which of these resonates most with your own week?",hint:"Pick one.",
-  options:[{k:'A',label:'Predict & Prevent',sub:'machine / planning failures'},
-   {k:'B',label:'See the Site',sub:'no real-time cross-functional visibility'},
-   {k:'C',label:'Know Before You Act',sub:'finding the right document / version'},
-   {k:'D',label:'Connect Knowledge',sub:'information scattered across systems'}],
-  tip:"Validates the 4-cluster synthesis live. Run straight after the verbatim pain reveal."},
+  q:"Which type of AI feels most relevant to your area?",hint:"Pick one.",
+  options:[{k:'A',label:'Predictive Analytics',sub:'forecast failures / demand before they happen'},
+   {k:'B',label:'Computer Vision',sub:'inspect, read, or verify from images'},
+   {k:'C',label:'Generative AI',sub:'draft documents, summarise, answer from knowledge'},
+   {k:'D',label:'Optimisation / Scheduling',sub:'plan, sequence, allocate better'},
+   {k:'E',label:'Anomaly Detection',sub:'flag the abnormal — quality, equipment, process'},
+   {k:'F',label:'Digital Twin',sub:'simulate the line / plant before acting'},
+   {k:'G',label:'Other',sub:'something else — tell us in the room'}],
+  tip:"Surfaces which AI capability the room gravitates to. Run after the verbatim pain reveal, then bridge: ‘here’s what each of these looks like for your problems.’"},
  {id:'M5',block:'Block 2 · Possible',kicker:'M5 · Open Ended',type:'open',
   q:"Your use case in one line + the one number that would prove it worked.",hint:"e.g. \u201cCut SMD changeover scrap \u2014 metric: first-pass yield %\u201d",
   tip:"Captures <b>Commitment #1</b>; feeds prioritisation in Block 4."},
@@ -428,10 +431,10 @@ function drawBars(s,rows){
   const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
   const c={};rows.forEach(x=>{const k=x.payload.choice;if(k)c[k]=(c[k]||0)+1;});
   const total=rows.length;if(r)r.textContent=total+' votes';
-  box.innerHTML='<div class="bars">'+s.options.map(o=>{
-    const n=c[o.k]||0,pct=total?Math.round(n/total*100):0;
+  box.innerHTML='<div class="bars">'+s.options.map((o,i)=>{
+    const n=c[o.k]||0,pct=total?Math.round(n/total*100):0;const col=PALETTE[i%PALETTE.length];
     return `<div class="bar-row"><div class="bl"><span><b>${o.k}</b> · ${o.label}</span><span class="pct">${pct}% · ${n}</span></div>
-      <div class="track"><div class="fill ${o.k}" style="width:${pct}%"></div></div></div>`;}).join('')+'</div>';
+      <div class="track"><div class="fill" style="width:${pct}%;background:linear-gradient(90deg,${col},${col}cc)"></div></div></div>`;}).join('')+'</div>';
 }
 function drawScales(s,rows){
   const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
