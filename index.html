@@ -181,8 +181,13 @@
 const SUPABASE_URL = "https://napizlfntbxnctwmmmdg.supabase.co";
 const SUPABASE_KEY = "sb_publishable_b-i4jOVOQ3EhRmcRJ5p08Q_VUFyLaXt";
 
-/* one shared session id — change to run a fresh, empty session */
-const SESSION = "livanova-2026";
+/* The active project/session. Presenter picks it on the start screen; phones follow.
+   Responses are tagged with this value so each project's data is separate & retrievable. */
+let SESSION = "livanova-2026";
+const RT_CHANNEL = "livanova-app-rt"; // one fixed realtime channel for all projects
+/* Friendly display names for known project ids (the underlying tag stays stable). */
+const PROJECT_LABELS = { "livanova-2026": "LivaNova — Munich" };
+const projLabel = (id) => PROJECT_LABELS[id] || id;
 
 /* ---------------- slide model (same 15 as the Build Pack) ---------------- */
 const PALETTE=['#064CC8','#112868','#2e8540','#c0631c','#7a4fd0','#0a8aa0','#b03060','#1f7a8c'];
@@ -302,6 +307,7 @@ function startPresenter(){
      <header>
        <span class="brand">LivaNova <b>×</b> LTTS · AI Workshop</span>
        <span class="pill" id="blockTag">Join</span>
+       <span class="pill" id="projTag" style="background:var(--light);color:var(--blue-d)"></span>
        <span class="spacer"></span>
        <span class="qcount" id="qcount"></span>
      </header>
@@ -318,6 +324,7 @@ function startPresenter(){
      </div>
    </div>`;
   const rail=document.getElementById('rail');
+  const pt=document.getElementById('projTag'); if(pt) pt.textContent='● '+projLabel(SESSION);
   // slide 0 = join screen, then 15 questions
   const seg0=document.createElement('div');seg0.className='seg';seg0.onclick=()=>jump(0);rail.appendChild(seg0);
   SLIDES.forEach((s,i)=>{const seg=document.createElement('div');seg.className='seg';seg.title=s.id;seg.onclick=()=>jump(i+1);rail.appendChild(seg);});
@@ -371,7 +378,7 @@ function subscribeRealtime(){
   // defer so the Supabase client + socket are fully ready before opening the channel
   setTimeout(()=>{
     try{
-      channel=sb.channel('rt-'+SESSION)
+      channel=sb.channel(RT_CHANNEL)
         .on('postgres_changes',{event:'*',schema:'public',table:'responses',filter:'session=eq.'+SESSION},
           payload=>{ const qid=(payload.new&&payload.new.qid)||(payload.old&&payload.old.qid); if(qid){ refresh(qid); } })
         .on('broadcast',{event:'whereare'},()=>broadcastSlide())
@@ -510,7 +517,7 @@ async function exportResults(){
   flash('Gathering responses…',true);
   const {data,error}=await sb.from('responses').select('qid,payload,created_at').eq('session',SESSION).order('created_at',{ascending:true});
   if(error){ flash('Export failed: '+error.message,false); return; }
-  const rows=data||[];
+  const rows=(data||[]).filter(r=>r.qid!=='__created__');
   const byQ={}; rows.forEach(r=>{ (byQ[r.qid]=byQ[r.qid]||[]).push(r.payload); });
   const stamp=new Date().toISOString().slice(0,16).replace('T',' ');
   let out='LivaNova × LTTS — AI Workshop · Live Poll Results\n';
@@ -581,8 +588,8 @@ function startVoter(){
   // voters poll the "current slide" via a lightweight presence: we use the URL hash the presenter could set,
   // but simplest robust approach — let the phone pick the question itself from a tiny dropdown is bad UX.
   // Instead: phone follows whatever the PRESENTER broadcasts on the realtime channel.
-  const ch=sb.channel('rt-'+SESSION,{config:{broadcast:{self:false}}});
-  ch.on('broadcast',{event:'slide'},({payload})=>{ renderVoter(payload.id); })
+  const ch=sb.channel(RT_CHANNEL,{config:{broadcast:{self:false}}});
+  ch.on('broadcast',{event:'slide'},({payload})=>{ if(payload.session){ SESSION=payload.session; } renderVoter(payload.id); })
     .subscribe(status=>{ document.getElementById('vstatus').textContent = status==='SUBSCRIBED'?'Connected — follow the screen':'Reconnecting…'; });
   // Also let the phone request current slide on join:
   setTimeout(()=>ch.send({type:'broadcast',event:'whereare',payload:{}}),600);
@@ -640,7 +647,7 @@ async function vRankSend(qid){if(await submit(qid,{order:vRankOrder},true))vAck(
 function vAck(qid){vDone[qid]=true;const card=document.getElementById('vcard');card.innerHTML=`<div class="vthanks"><div class="big">✓</div><div style="font-weight:700;color:var(--blue-d)">Answer sent</div><div style="color:var(--muted);margin-top:6px">Look up at the screen.</div></div>`;}
 
 /* presenter broadcasts current slide so phones follow automatically */
-function broadcastSlide(){ if(channel&&cur>=1){ channel.send({type:'broadcast',event:'slide',payload:{id:SLIDES[cur-1].id}}); } }
+function broadcastSlide(){ if(channel&&cur>=1){ channel.send({type:'broadcast',event:'slide',payload:{id:SLIDES[cur-1].id,session:SESSION}}); } }
 
 /* =========================================================
    SETUP GATE (shown until you paste the two values)
@@ -672,10 +679,82 @@ alter publication supabase_realtime add table responses;</pre>
   </div>`;
 }
 
+/* =========================================================
+   PROJECT PICKER (presenter start screen)
+   Lets the presenter choose which project/session to run, or create a new one.
+   All responses are tagged with the chosen SESSION for separate retrieval.
+   ========================================================= */
+async function listProjects(){
+  // distinct session names that already have data
+  try{
+    const {data,error}=await sb.from('responses').select('session').limit(2000);
+    if(error) return [];
+    const set={}; (data||[]).forEach(r=>{ if(r.session) set[r.session]=true; });
+    return Object.keys(set).sort();
+  }catch(e){ return []; }
+}
+async function startProjectPicker(){
+  let projects=await listProjects();
+  // LivaNova is always present, listed first, and pre-selected
+  projects=projects.filter(p=>p!=='livanova-2026');
+  projects.unshift('livanova-2026');
+  root.innerHTML=`
+   <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px">
+     <div style="background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);max-width:560px;width:100%;padding:40px">
+       <div style="font-weight:900;color:var(--blue-d);font-size:16px;margin-bottom:6px">LivaNova <span style="color:var(--blue)">×</span> LTTS · AI Workshop</div>
+       <div style="font-family:var(--serif);font-size:30px;color:var(--blue-d);font-weight:600;margin-bottom:6px">Choose a project</div>
+       <div style="font-size:14px;color:var(--muted);margin-bottom:24px">Responses are saved under the selected project, so you can retrieve each workshop's results separately later.</div>
+
+       <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">Existing projects</label>
+       <select id="projSel" style="width:100%;font-family:var(--font);font-size:16px;border:1.5px solid var(--line);border-radius:12px;padding:13px;margin:8px 0 18px;outline:none;background:#fff;color:var(--ink)">
+         ${projects.map((p,i)=>`<option value="${p}"${i===0?' selected':''}>${projLabel(p)}</option>`).join('')}
+       </select>
+
+       <div id="newWrap" style="display:none;margin-bottom:18px">
+         <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">New project name</label>
+         <input id="newName" type="text" placeholder="e.g. acme-2026" style="width:100%;font-family:var(--font);font-size:16px;border:1.5px solid var(--blue);border-radius:12px;padding:13px;margin-top:8px;outline:none;box-shadow:0 0 0 3px var(--blue-bg)">
+         <div style="font-size:12px;color:var(--muted);margin-top:6px">Lowercase, no spaces — e.g. <b>client-2026</b>. A fresh, empty session.</div>
+       </div>
+
+       <div style="display:flex;gap:10px;flex-wrap:wrap">
+         <button id="newBtn" class="btn ghost" style="flex:1;justify-content:center">+ New project</button>
+         <button id="goBtn" class="btn primary" style="flex:1;justify-content:center">Continue →</button>
+       </div>
+       <div id="pickerMsg" style="font-size:12px;color:var(--muted);margin-top:14px"></div>
+     </div>
+   </div>`;
+  let creating=false;
+  const sel=document.getElementById('projSel');
+  const newWrap=document.getElementById('newWrap');
+  const newBtn=document.getElementById('newBtn');
+  newBtn.onclick=()=>{
+    creating=!creating;
+    newWrap.style.display=creating?'block':'none';
+    sel.style.opacity=creating?'0.4':'1'; sel.disabled=creating;
+    newBtn.textContent=creating?'Use existing instead':'+ New project';
+    if(creating) setTimeout(()=>document.getElementById('newName').focus(),50);
+  };
+  document.getElementById('goBtn').onclick=async ()=>{
+    let chosen;
+    if(creating){
+      chosen=(document.getElementById('newName').value||'').trim().toLowerCase().replace(/[^a-z0-9\-]+/g,'-').replace(/^-+|-+$/g,'');
+      if(!chosen){ document.getElementById('pickerMsg').textContent='Please type a project name.'; return; }
+      document.getElementById('pickerMsg').textContent='Creating project…';
+      // register the project immediately with a marker row so it persists & shows in the dropdown
+      try{ await sb.from('responses').insert({session:chosen,qid:'__created__',vid:'system',payload:{created:new Date().toISOString()}}); }
+      catch(e){ document.getElementById('pickerMsg').textContent='Could not create project: '+e.message; return; }
+    } else {
+      chosen=sel.value;
+    }
+    SESSION=chosen;
+    startPresenter();
+  };
+}
+
 /* ===== bootstrap LAST, after everything is defined ===== */
 if(!configured){ renderGate(); }
 else if(MODE==='vote'){ startVoter(); }
-else { startPresenter(); }
+else { startProjectPicker(); }
 </script>
 </body>
 </html>
