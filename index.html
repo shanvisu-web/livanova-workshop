@@ -62,9 +62,9 @@
   .viz-body{position:absolute;inset:46px 0 0 0;overflow:auto;padding:16px}
 
   /* animated word cloud (Mentimeter-style) */
-  .cloudwrap{position:absolute;inset:0}
-  .cw{position:absolute;font-weight:800;line-height:1;white-space:nowrap;transform:translate(-50%,-50%) scale(0);transition:transform .55s cubic-bezier(.2,1.4,.4,1),left .5s ease,top .5s ease,font-size .4s ease;will-change:transform}
-  .cw.in{transform:translate(-50%,-50%) scale(1)}
+  .cloudwrap{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-items:center;align-content:center;justify-content:center;gap:6px 20px;padding:24px;overflow:auto}
+  .cw{font-weight:800;line-height:1.05;white-space:nowrap;opacity:0;transform:scale(.6);transition:opacity .45s ease,transform .45s cubic-bezier(.2,1.4,.4,1),font-size .35s ease}
+  .cw.in{opacity:1;transform:scale(1)}
 
   /* bars */
   .bars{display:flex;flex-direction:column;gap:14px;justify-content:center;height:100%}
@@ -368,8 +368,7 @@ function buildStage(){
       <div class="qtitle">${s.q}</div>
       <div class="qhint">${s.hint}</div>
       <div class="viz"><div class="viz-head"><span class="lbl">Live results</span><span class="resp" id="resp-${s.id}">0</span></div>
-        <div class="viz-body" id="viz-${s.id}"></div></div>
-      <div class="live-tip"><b>Facilitator:</b> ${s.tip}</div>`;
+        <div class="viz-body" id="viz-${s.id}"></div></div>`;
     stage.appendChild(el);
   });
 }
@@ -405,34 +404,28 @@ function drawCloud(s,rows){
   const r=document.getElementById('resp-'+s.id);
   const words=rows.map(x=>(x.payload.word||'').toLowerCase()).filter(Boolean);
   if(r)r.textContent=words.length+' words';
-  if(!words.length){box.innerHTML='<div class="empty">Words float in as people answer…</div>';return;}
+  if(!words.length){box.innerHTML='<div class="empty">Words appear here as people answer…</div>';return;}
   const freq={};words.forEach(w=>freq[w]=(freq[w]||0)+1);
   const max=Math.max(...Object.values(freq));
   const items=Object.entries(freq).sort((a,b)=>b[1]-a[1]);
-  // animated layout: spiral placement around centre
+  // flex-wrap layout — sized by frequency, never overlaps
   if(!box.querySelector('.cloudwrap')) box.innerHTML='<div class="cloudwrap"></div>';
   const wrap=box.querySelector('.cloudwrap');
   const seen={};[...wrap.children].forEach(c=>seen[c.dataset.w]=c);
-  const W=wrap.clientWidth||800,H=wrap.clientHeight||400;
   items.forEach(([w,c],i)=>{
-    const size=20+(c/max)*54;
+    const size=20+(c/max)*50;
     let span=seen[w];
     if(!span){span=document.createElement('span');span.className='cw';span.dataset.w=w;span.textContent=w;wrap.appendChild(span);requestAnimationFrame(()=>span.classList.add('in'));}
-    span.style.color=PALETTE[i%PALETTE.length];span.style.fontSize=size+'px';span.style.zIndex=String(100-i);
-    // spiral coords
-    const ang=i*2.399, rad=(i===0?0:14+i*16);
-    const x=W/2+Math.cos(ang)*rad*(W/H>1.6?1.4:1);
-    const y=H/2+Math.sin(ang)*rad*0.8;
-    span.style.left=Math.max(8,Math.min(W-8,x))+'px';
-    span.style.top=Math.max(20,Math.min(H-20,y))+'px';
+    span.style.color=PALETTE[i%PALETTE.length];span.style.fontSize=size+'px';span.style.order=String(i);
     delete seen[w];
   });
   Object.values(seen).forEach(el=>el.remove());
 }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function drawOpen(s,rows){
   const box=document.getElementById('viz-'+s.id);
   if(!rows.length){box.innerHTML='<div class="empty">Submitted lines appear here.</div>';return;}
-  box.innerHTML=rows.map(x=>`<div class="txtcard">${esc(x.payload.text||'')}</div>`).join('');
+  box.innerHTML=rows.map(x=>`<div class="txtcard">${esc(x.payload&&x.payload.text||'')}</div>`).join('');
 }
 function drawBars(s,rows){
   const box=document.getElementById('viz-'+s.id);const r=document.getElementById('resp-'+s.id);
